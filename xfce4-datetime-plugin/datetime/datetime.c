@@ -45,6 +45,8 @@ datetime_update(gpointer data)
 {
     GTimeVal timeval;
     gchar buf[256];
+    gchar *utf8str;
+    int len;
     struct tm *current;
     DatetimePlugin *datetime;
 
@@ -57,8 +59,17 @@ datetime_update(gpointer data)
 
     g_get_current_time(&timeval);
     current = localtime((time_t *)&timeval.tv_sec);
-    strftime(buf, sizeof(buf), datetime->format, current);
-    gtk_label_set_text(GTK_LABEL(datetime->label), buf);
+    len = strftime(buf, sizeof(buf) - 1, datetime->format, current);
+    if (len != 0) {
+	buf[len] = '\0';  /* make sure nul terminated string */
+	utf8str = g_locale_to_utf8(buf, len, NULL, NULL, NULL);
+	if (utf8str != NULL) {
+	    gtk_label_set_text(GTK_LABEL(datetime->label), utf8str);
+	    g_free(utf8str);
+	    return TRUE;
+	}
+    }
+    gtk_label_set_text(GTK_LABEL(datetime->label), "Error");
     return TRUE;
 }
 
