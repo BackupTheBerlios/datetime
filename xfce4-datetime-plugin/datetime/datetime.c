@@ -22,6 +22,7 @@
 #endif
 
 #include <time.h>
+#include <gdk/gdkkeysyms.h>
 
 #include <panel/global.h>
 #include <panel/controls.h>
@@ -34,6 +35,7 @@ typedef struct {
     gchar *font;
     gchar *format;
     guint timeout_id;
+    gint orientation;
 
     GtkWidget *font_selector;
     GtkWidget *format_entry;
@@ -73,6 +75,97 @@ datetime_update(gpointer data)
     return TRUE;
 }
 
+static GtkWidget *
+pop_calendar_window(GtkWidget *parent, int orientation)
+{
+    GtkWidget *window;
+    GtkWidget *cal;
+    gint parent_x, parent_y, parent_w, parent_h;
+    gint root_w, root_h;
+    gint width, height, x, y;
+    GtkRequisition requisition;
+    GtkAllocation allocation;
+
+    window = gtk_window_new(GTK_WINDOW_POPUP);
+
+    cal = gtk_calendar_new();
+    gtk_container_add(GTK_CONTAINER(window), cal);
+
+    gdk_window_get_origin(GDK_WINDOW(parent->window), &parent_x, &parent_y);
+    gdk_drawable_get_size(GDK_DRAWABLE(parent->window), &parent_w, &parent_h);
+
+    root_w = gdk_screen_width();
+    root_h = gdk_screen_height();
+
+    gtk_widget_realize(GTK_WIDGET(window));
+
+    gtk_widget_size_request(GTK_WIDGET(cal), &requisition);
+
+    allocation.x = requisition.width;
+    allocation.y = requisition.height;
+    gtk_widget_size_allocate(GTK_WIDGET(cal), &allocation);
+
+    gtk_widget_size_request(GTK_WIDGET(cal), &requisition);
+    width = requisition.width;
+    height = requisition.height;
+
+    g_print("parent: %dx%d +%d+%d\n", parent_w, parent_h, parent_x, parent_y);
+    g_print("root: %dx%d\n", root_w, root_h);
+    g_print("calendar: %dx%d\n", width, height);
+
+    if (orientation == GTK_ORIENTATION_VERTICAL) {
+        if (parent_x < root_w / 2) {
+            if (parent_y < root_h / 2) {
+                /* upper left */
+                x = parent_x + parent_w;
+                y = parent_y;
+            } else {
+                /* lower left */
+                x = parent_x + parent_w;
+                y = parent_y + parent_h - height;
+            }
+        } else {
+            if (parent_y < root_h / 2) {
+                /* upper right */
+                x = parent_x - width;
+                y = parent_y;
+            } else {
+                /* lower right */
+                x = parent_x - width;
+                y = parent_y + parent_h - height;
+            }
+        }
+    } else {
+        if (parent_x < root_w / 2) {
+            if (parent_y < root_h / 2) {
+                /* upper left */
+                x = parent_x;
+                y = parent_y + parent_h;
+            } else {
+                /* lower left */
+                x = parent_x;
+                y = parent_y - height;
+            }
+        } else {
+            if (parent_y < root_h / 2) {
+                /* upper right */
+                x = parent_x + parent_w - width;
+                y = parent_y + parent_h;
+            } else {
+                /* lower right */
+                x = parent_x + parent_w - width;
+                y = parent_y - height;
+            }
+        }
+    }
+
+    gtk_window_move(GTK_WINDOW(window), x, y);
+    gtk_widget_show(cal);
+    gtk_widget_show(window);
+
+    return window;
+}
+
 static gboolean
 on_button_press_event_cb(GtkWidget *widget,
 			 GdkEventButton *event, gpointer data)
@@ -85,16 +178,11 @@ on_button_press_event_cb(GtkWidget *widget,
 
 	datetime = (DatetimePlugin*)data;
 	if (datetime->cal != NULL) {
-	    gtk_widget_show(datetime->cal);
+	    gtk_widget_destroy(datetime->cal);
+	    datetime->cal = NULL;
 	} else {
-	    GtkWidget *cal;
-	    datetime->cal = gtk_window_new(GTK_WINDOW_POPUP);
-	    gtk_window_set_position(GTK_WINDOW(datetime->cal),
-		    		    GTK_WIN_POS_MOUSE);
-	    cal = gtk_calendar_new();
-	    gtk_container_add(GTK_CONTAINER(datetime->cal), cal);
-	    gtk_widget_show(datetime->cal);
-	    gtk_widget_show(cal);
+	    datetime->cal = pop_calendar_window(datetime->eventbox,
+						datetime->orientation);
 	}
 	return TRUE;
     }
@@ -102,22 +190,17 @@ on_button_press_event_cb(GtkWidget *widget,
 }
 
 static gboolean
-on_button_release_event_cb(GtkWidget *widget,
-			   GdkEventButton *event, gpointer data)
+on_key_press_event_cb(GtkWidget *widget, GdkEventKey *event, gpointer data)
 {
-    if (event->button == 1) {
-    	DatetimePlugin *datetime;
+    if (event->keyval == GDK_Escape) {
+    	DatetimePlugin *datetime = (DatetimePlugin*)data;
 
-	if (data == NULL)
-	    return FALSE;
-
-	datetime = (DatetimePlugin*)data;
-	if (datetime->cal != NULL) {
-	    gtk_widget_destroy(datetime->cal);
+	if (datetime != NULL && datetime->cal) {
+	    gtk_widget_destroy (GTK_WIDGET(datetime->cal));
 	    datetime->cal = NULL;
 	}
 	return TRUE;
-    }
+    }   
     return FALSE;
 }
 
@@ -127,10 +210,12 @@ datetime_new (void)
     DatetimePlugin *datetime = g_new (DatetimePlugin, 1);
 
     datetime->eventbox = gtk_event_box_new();
+    gtk_widget_add_events(datetime->eventbox, GDK_KEY_PRESS_MASK);
     g_signal_connect(G_OBJECT(datetime->eventbox), "button-press-event",
 	    	     G_CALLBACK(on_button_press_event_cb), datetime);
-    g_signal_connect(G_OBJECT(datetime->eventbox), "button-release-event",
-	   	     G_CALLBACK(on_button_release_event_cb), datetime);
+    g_signal_connect(G_OBJECT(datetime->eventbox), "key-press-event",
+	    	     G_CALLBACK(on_key_press_event_cb), datetime);
+
     datetime->label = gtk_label_new("");
     gtk_container_add(GTK_CONTAINER(datetime->eventbox), datetime->label);
     gtk_label_set_justify(GTK_LABEL(datetime->label), GTK_JUSTIFY_CENTER);
@@ -141,6 +226,7 @@ datetime_new (void)
 
     datetime->cal = NULL;
     datetime->timeout_id = g_timeout_add(15000, datetime_update, datetime);
+    datetime->orientation = GTK_ORIENTATION_HORIZONTAL;
 
     return datetime;
 }
@@ -336,6 +422,14 @@ datetime_set_size(Control *control, int size)
     gtk_widget_set_size_request (control->base, -1, -1);
 }
 
+static void
+datetime_set_orientation(Control *control, int orientation)
+{
+    DatetimePlugin *datetime = control->data;
+
+    datetime->orientation = orientation;
+}
+
 /*  Date panel control
  *  -------------------
 */
@@ -368,6 +462,8 @@ xfce_control_class_init (ControlClass * cc)
     cc->attach_callback = datetime_attach_callback;
 
     cc->create_options = datetime_create_options;
+
+    cc->set_orientation = datetime_set_orientation;
 
     cc->set_size = datetime_set_size;
 }
