@@ -2,8 +2,8 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.57)
-AC_INIT(xfce4-panel-datetime-plugin, 0.1, krisna@users.berlios.de)
-AM_INIT_AUTOMAKE([xfce4-datetime-plugin], [0.1])
+AC_INIT(xfce4-panel-datetime-plugin, 0.2, krisna@users.berlios.de)
+AM_INIT_AUTOMAKE([xfce4-datetime-plugin], [0.2])
 AC_CONFIG_SRCDIR([datetime/datetime.c])
 AC_CONFIG_HEADER([config.h])
 
